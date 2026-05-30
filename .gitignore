@@ -1,0 +1,15 @@
+# Secrets / env — never commit
+.env
+.env.local
+.env.secrets
+.env.mcp
+.env*.local
+
+# Dependencies / build
+node_modules/
+.next/
+dist/
+*.log
+
+# Forge engine state (local only)
+.forge/

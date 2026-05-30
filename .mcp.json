@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "forge-engine": {
+      "command": "python",
+      "args": [
+        "D:\\Python Projects\\AI Automated\\workflow-system-v2\\engine\\forge_mcp_server.py"
+      ]
+    },
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "dotenv-cli",
+        "-e",
+        "D:\\Python Projects\\AI Automated\\claude-test\\.env.mcp",
+        "--",
+        "npx",
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--project-ref=xjtggteqeahlzxrrwdgq"
+      ]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ]
+    }
+  }
+}
