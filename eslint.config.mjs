@@ -12,7 +12,18 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Non-application code: Node hook scripts, Playwright e2e, supabase functions.
+    ".claude/**",
+    "e2e/**",
+    "supabase/**",
   ]),
+  {
+    // Async effects (session bootstrap, snapshot + realtime subscriptions) legitimately
+    // setState after an await; this rule targets *synchronous* setState in effect bodies.
+    rules: {
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

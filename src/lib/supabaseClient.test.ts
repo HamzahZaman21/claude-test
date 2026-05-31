@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { SupabaseClient, Session, AuthResponse, UserResponse } from '@supabase/supabase-js';
+import type { Session, AuthResponse } from '@supabase/supabase-js';
 
 // We'll test the module by mocking @supabase/supabase-js and the env vars
 // and then dynamically importing the module under test.
@@ -126,7 +126,7 @@ describe('getAnonSession', () => {
       expires_in: 3600,
       expires_at: 9999999999,
       refresh_token: 'ref',
-      user: null as any,
+      user: null as unknown as Session['user'],
     };
     mockGetSession.mockResolvedValue({ data: { session: fakeSession }, error: null });
 

@@ -36,3 +36,30 @@ returns an anonymous user.
 Prevention: Verify runtime auth dependencies early in Phase B. Documented in DEPLOYMENT.md
 as a required project setting for any new environment.
 Affected files: (Supabase project auth config — no repo file)
+
+## 2026-06-01: Forge engine unusable here — file-format parser + node_modules corruption
+What happened: Phase D `forge_start_build` (3 DeepSeek workers) blocked 4 of the first 5
+no-dependency tasks; only TASK-004 merged. Two independent engine problems:
+(1) **File-output parse failure.** The engine's `write_files_from_response` extracts files
+    with the regex `=== FILE: path ===\n…\n=== END FILE ===`. The DeepSeek workers emitted
+    the opening `=== FILE: ===` header but OMITTED the closing `=== END FILE ===`, so the
+    regex matched nothing and the engine dumped the RAW response (header line included) into
+    the file → invalid TS (`esbuild: Unexpected "==="`). Workers also renamed files
+    (`types.ts`→`domain.ts`). `forge_apply_feedback` with explicit format+path guidance did
+    NOT fix it — the model kept dropping the closing delimiter.
+(2) **node_modules destroyed.** The engine links deps into each worktree via a Windows
+    junction (`mklink /J node_modules`). Its worktree teardown then deleted *through* the
+    junction, removing packages from the MAIN project `node_modules` (vitest vanished), and
+    poisoned the `npx` cache so even `npx vitest` in the main repo failed with
+    "Cannot find module 'vitest/config'".
+Root cause: worker output-format drift the engine can't tolerate, plus a junction-deletion
+hazard in worktree cleanup on Windows.
+Fix: Cleared the poisoned `_npx` cache and ran `npm ci` to restore node_modules. Abandoned
+the engine for the remaining tasks and completed Phase D via **orchestrator handoff**
+(escalation ladder step 3): implemented the frontend/lib/engine directly against the
+TASK-MANIFEST contracts, verifying with `npx vitest run` + `npm run build`. Did NOT re-run
+`forge_start_build`/`resume`/`apply_feedback` (each re-corrupts node_modules).
+Prevention: For this engine on Windows, run with workers=1 and/or disable
+`worktree_link_dirs` and `npm ci` per worktree; or fix the engine's response parser to be
+delimiter-tolerant and its teardown to not follow junctions. Tracked for the workflow team.
+Affected files: node_modules (restored), src/lib/* (built by handoff)

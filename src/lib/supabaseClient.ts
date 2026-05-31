@@ -15,19 +15,22 @@ export const supabase = createClient<Database>(
 export async function getAnonSession(): Promise<{ userId: string }> {
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) {
-    throw new Error('Failed to get session');
+    throw new Error(sessionError.message);
   }
 
-  if (session?.user?.id) {
+  if (session) {
+    if (!session.user?.id) {
+      throw new Error('No user in existing session');
+    }
     return { userId: session.user.id };
   }
 
   const { data: anonData, error: signInError } = await supabase.auth.signInAnonymously();
   if (signInError) {
-    throw new Error('Failed to sign in anonymously');
+    throw new Error(signInError.message);
   }
   if (!anonData?.user?.id) {
-    throw new Error('Anonymous sign-in returned no user');
+    throw new Error('No user returned from anonymous sign-in');
   }
 
   return { userId: anonData.user.id };
