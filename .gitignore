@@ -36,3 +36,5 @@ next-env.d.ts
 # Playwright MCP review artifacts
 .playwright-mcp/
 review-*.png
+
+.vercel
