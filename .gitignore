@@ -32,3 +32,7 @@ next-env.d.ts
 
 # Forge engine state (local only)
 .forge/
+
+# Playwright MCP review artifacts
+.playwright-mcp/
+review-*.png

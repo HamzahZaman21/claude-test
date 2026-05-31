@@ -63,3 +63,23 @@ Prevention: For this engine on Windows, run with workers=1 and/or disable
 `worktree_link_dirs` and `npm ci` per worktree; or fix the engine's response parser to be
 delimiter-tolerant and its teardown to not follow junctions. Tracked for the workflow team.
 Affected files: node_modules (restored), src/lib/* (built by handoff)
+
+## 2026-06-01: Three backend bugs caught by the Phase E integration script
+What happened: A 4-player backend integration script (e2e/integration-check.mjs) surfaced
+three issues no unit test could:
+1. `gen_room_code()` — local variable named `code` collided with `rooms.code` in the
+   uniqueness `EXISTS` check → "column reference code is ambiguous"; room creation failed.
+   Fix: renamed the variable to `v_code` (migration 0009).
+2. **Missing table GRANTs.** Tables created via raw-SQL `apply_migration` did NOT receive
+   the default `authenticated`/`anon` privileges the Supabase dashboard would add, so every
+   client query failed with "permission denied for table players" BEFORE RLS even ran. RLS
+   policies are necessary but not sufficient — the table-level GRANT is a prerequisite.
+   Fix: granted SELECT (and players INSERT/UPDATE/DELETE) to `authenticated`; RLS still
+   scopes rows (migration 0010).
+3. `rpc_reveal_card` compared `card_identity = team_color` (two different enum types — no
+   operator) → "operator does not exist". Fix: compare via `::text` (migration 0011).
+Prevention: Always run a real end-to-end backend integration pass (anonymous client →
+RPC/Edge Function → RLS) before declaring the data layer done; unit tests on pure logic
+cannot catch SQL/enum/grant issues. After raw-SQL table creation, explicitly GRANT to
+`authenticated`.
+Affected files: migrations 0009–0011 (Supabase), e2e/integration-check.mjs
