@@ -1,0 +1,29 @@
+# Safety-locked files — DO NOT MODIFY
+# One glob pattern per line. Supports: * (within a directory), ** (recursive).
+# Enforced by .claude/hooks/check-protected-files.js (PreToolUse, exit code 2).
+
+# Environment / secret files
+.env
+.env.*
+.env.local
+.env.mcp
+.env.secrets
+
+# Database migration history (never hand-edit applied migrations)
+supabase/migrations/**
+
+# CI/CD pipelines
+.github/workflows/**
+Dockerfile
+docker-compose.yml
+docker-compose.*.yml
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Governance / protection config itself
+.claude/protected-paths.txt
+.claude/hooks/**
+BLUEPRINT.md
