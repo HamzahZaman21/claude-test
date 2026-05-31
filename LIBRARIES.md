@@ -4,14 +4,35 @@
 > pinned here from known-current usage. The DeepSeek workers cannot fetch docs —
 > they must rely on this file. Use these exact call shapes.
 
-## Versions (install latest stable in these major lines)
-- `next` (App Router, React 19) — `create-next-app@latest`
-- `react`, `react-dom`
-- `@supabase/supabase-js` v2
-- `framer-motion`
-- `tailwindcss` (configured by create-next-app)
-- Dev/test: `vitest`, `@testing-library/react`, `@testing-library/jest-dom`, `jsdom`,
-  `@playwright/test`
+## Versions (as installed in this project)
+- `next` **16.2.6** (App Router) + `react`/`react-dom` **19.2.x**
+- `@supabase/supabase-js` **v2**
+- `framer-motion` **v12**
+- `tailwindcss` **v4** (CSS-first config — see note below; NO `tailwind.config.js`)
+- Dev/test: `vitest` **v3** (pinned — v4's rolldown runner fails under the forge engine,
+  see LESSONS.md / ADR-009), `@testing-library/react`, `@testing-library/jest-dom`,
+  `jsdom`, `@playwright/test`
+
+## Tailwind v4 (IMPORTANT — different from v3)
+- No `tailwind.config.js`. Config lives in CSS: `@import "tailwindcss";` then a
+  `@theme { --color-...: ...; }` block in `src/app/globals.css`. Design tokens from
+  DESIGN-SYSTEM.md are declared as `@theme` custom properties and used as normal Tailwind
+  utility classes (e.g. `bg-bg`, `text-cyan`) or via `var(--color-...)`.
+- PostCSS uses `@tailwindcss/postcss` (already configured in `postcss.config.mjs`).
+- Do NOT create a `tailwind.config.js`; do NOT use `@tailwind base/components/utilities`
+  (that's v3). Use the single `@import "tailwindcss";`.
+
+## Next.js 16 App Router notes
+- `app/room/[code]/page.tsx`: in Next 16 `params` is a Promise in server components
+  (`const { code } = await params;`). The room page is a client container — read the code
+  via `useParams()` from `next/navigation` (client) or pass it down from a server wrapper.
+- Client components using hooks/realtime/state begin with `"use client"`.
+
+## Vitest v3 config (the per-task engine test command — `npx vitest run`)
+- `vitest.config.ts` uses `environment: 'jsdom'`, `globals: true`, `setupFiles:
+  ['./src/test/setup.ts']` (imports `@testing-library/jest-dom`), and `include:
+  ['src/**/*.{test,spec}.{ts,tsx}']` with `e2e/**` excluded. Engine tests are pure and
+  need no DB/browser.
 
 ---
 
@@ -146,13 +167,21 @@ Deno.serve(async (req: Request) => {
   `useParams()`.
 - Do not put the service-role key in any client component or `NEXT_PUBLIC_*` var.
 
-## Vitest config (the per-task engine test command — `npx vitest run`)
+## Vitest config (already written — do not add the react plugin)
+The committed `vitest.config.ts` (Vitest v3) is:
 ```ts
-// vitest.config.ts
 import { defineConfig } from 'vitest/config';
+import path from 'node:path';
 export default defineConfig({
-  test: { environment: 'jsdom', globals: true, setupFiles: ['./src/test/setup.ts'] },
+  resolve: { alias: { '@': path.resolve(__dirname, './src') } },
+  esbuild: { jsx: 'automatic' },
+  test: {
+    environment: 'jsdom', globals: true, setupFiles: ['./src/test/setup.ts'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    exclude: ['node_modules/**', '.next/**', 'e2e/**'],
+  },
 });
 ```
-Engine tests (`src/test/engine.test.ts`) import pure functions from `src/lib/engine.ts`
-and need no DB or browser.
+Do NOT add `@vitejs/plugin-react` — it breaks the runner under the forge engine. Engine
+tests (`src/test/engine.test.ts`) import pure functions from `src/lib/engine.ts` and need
+no DB or browser.

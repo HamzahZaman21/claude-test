@@ -62,3 +62,14 @@ Reason: The engine workers run in isolated worktrees with no DB/browser; rule co
 be verifiable headlessly and fast. The Edge Function RPCs mirror the same semantics.
 Rejected: Testing rules only through the live DB (slow, not available to workers).
 Status: Active. Reversibility: Easy.
+
+## ADR-009: Vitest pinned to v3 (2026-05-31)
+Decision: Pin `vitest` to v3 (3.2.4) rather than the scaffold's default v4.
+Reason: Vitest 4's rolldown/oxc worker pool fails under the forge-engine `forge_run_tests`
+runner (non-TTY subprocess) with `Cannot read properties of undefined (reading 'config')`,
+collecting 0 tests — while passing in a direct shell. Since every Phase D task runs its
+frozen tests through that exact runner, the test command must be reliable there. v3
+(esbuild-based) passes cleanly. See LESSONS.md (2026-05-31).
+Rejected: Keeping v4 (would fail every task in Phase D); adding `@vitejs/plugin-react`
+(also broke the runner). Status: Active. Reversibility: Easy (revisit when v4's runner is
+confirmed compatible with the engine).

@@ -7,9 +7,28 @@
 
 # Dependencies / build
 node_modules/
+/.pnp
+.pnp.*
 .next/
+/out/
+/build
 dist/
 *.log
+npm-debug.log*
+
+# testing
+/coverage
+
+# misc
+.DS_Store
+*.pem
+
+# typescript / next
+*.tsbuildinfo
+next-env.d.ts
+
+# vercel
+.vercel
 
 # Forge engine state (local only)
 .forge/
