@@ -143,7 +143,7 @@ export function rematch(roomId: string): Promise<{ game: Game }>;
 Bodies match API.md (e.g. `invoke('reveal_card', { body: { game_id, card_id } })`).
 
 ### [TASK-006] Room / seat helpers
-(Depends on: TASK-001, TASK-004)
+(Depends on: TASK-001, TASK-004, TASK-005)
 (Component: lib)
 (Files: src/lib/rooms.ts)
 (Persona: code-writer)
