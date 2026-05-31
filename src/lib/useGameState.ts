@@ -4,6 +4,10 @@
 // deltas. Re-fetches the full snapshot on (re)connect so a refreshed client renders the
 // exact current state. spymasterKey is fetched from card_identities ONLY for spymasters
 // (RLS returns rows only then). See TECHNICAL-DESIGN.md §5.
+//
+// The local player's role/team are derived from the live `players` list (by id), NOT from a
+// snapshot captured at join time — so a seat picked in the lobby (e.g. becoming Spymaster)
+// is reflected here and the spymaster key is fetched correctly.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from './supabaseClient';
@@ -21,9 +25,10 @@ export interface GameStateResult {
   spymasterKey: Record<string, CardIdentity>;
   loading: boolean;
   error: string | null;
+  refresh: () => Promise<void>;
 }
 
-export function useGameState(roomId: string, localPlayer: Player | null): GameStateResult {
+export function useGameState(roomId: string, localPlayerId: string | null): GameStateResult {
   const [room, setRoom] = useState<Room | null>(null);
   const [game, setGame] = useState<Game | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
@@ -35,7 +40,10 @@ export function useGameState(roomId: string, localPlayer: Player | null): GameSt
   const [error, setError] = useState<string | null>(null);
 
   const gameIdRef = useRef<string | null>(null);
-  const isSpymaster = localPlayer?.role === 'spymaster';
+
+  // Live local player derived from the roster.
+  const me = players.find((p) => p.id === localPlayerId) ?? null;
+  const isSpymaster = me?.role === 'spymaster';
 
   const loadGameDetails = useCallback(async (g: Game | null) => {
     if (!g) {
@@ -53,25 +61,6 @@ export function useGameState(roomId: string, localPlayer: Player | null): GameSt
     setClue((clueRes.data as Clue | null) ?? null);
   }, []);
 
-  const loadSpymasterKey = useCallback(
-    async (g: Game | null) => {
-      if (!g || !isSpymaster) {
-        setSpymasterKey({});
-        return;
-      }
-      const { data } = await supabase
-        .from('card_identities')
-        .select('card_id, identity')
-        .eq('game_id', g.id);
-      const map: Record<string, CardIdentity> = {};
-      (data ?? []).forEach((row) => {
-        map[(row as { card_id: string }).card_id] = (row as { identity: CardIdentity }).identity;
-      });
-      setSpymasterKey(map);
-    },
-    [isSpymaster],
-  );
-
   const snapshot = useCallback(async () => {
     try {
       const state = await fetchRoomState(roomId);
@@ -79,58 +68,81 @@ export function useGameState(roomId: string, localPlayer: Player | null): GameSt
       setPlayers(state.players);
       setGame(state.game);
       gameIdRef.current = state.game?.id ?? null;
-      await Promise.all([loadGameDetails(state.game), loadSpymasterKey(state.game)]);
+      await loadGameDetails(state.game);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load room');
     } finally {
       setLoading(false);
     }
-  }, [roomId, loadGameDetails, loadSpymasterKey]);
+  }, [roomId, loadGameDetails]);
 
   // Initial + reconnect snapshot.
   useEffect(() => {
     void snapshot();
   }, [snapshot]);
 
-  // Realtime subscriptions. Re-subscribe when the active game id changes.
+  // Spymaster key: (re)fetch whenever the active game changes OR the local player becomes a
+  // spymaster. RLS returns rows only to a same-game spymaster; everyone else gets nothing.
   useEffect(() => {
-    if (!localPlayer) return;
+    let cancelled = false;
+    if (!game || !isSpymaster) {
+      setSpymasterKey({});
+      return;
+    }
+    supabase
+      .from('card_identities')
+      .select('card_id, identity')
+      .eq('game_id', game.id)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const map: Record<string, CardIdentity> = {};
+        (data ?? []).forEach((row) => {
+          map[(row as { card_id: string }).card_id] = (row as { identity: CardIdentity }).identity;
+        });
+        setSpymasterKey(map);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Re-fetch only when the active game id or spymaster status changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game?.id, isSpymaster]);
+
+  // Realtime subscriptions. Re-subscribe when the active game id or the local player's
+  // presence-relevant fields change.
+  useEffect(() => {
+    if (!localPlayerId) return;
     const presenceMeta: PresenceMeta = {
-      player_id: localPlayer.id,
-      display_name: localPlayer.display_name,
-      team: localPlayer.team,
-      role: localPlayer.role,
+      player_id: localPlayerId,
+      display_name: me?.display_name ?? '',
+      team: me?.team ?? 'none',
+      role: me?.role ?? 'none',
     };
     const unsub = subscribeRoom({
       roomId,
       gameId: gameIdRef.current,
       player: presenceMeta,
       handlers: {
+        onRoom: (r) => setRoom(r),
         onGame: (g) => {
           const prevGameId = gameIdRef.current;
           setGame(g);
           if (g.id !== prevGameId) {
-            // A new game started (or first load) — re-snapshot board + key.
             gameIdRef.current = g.id;
             void loadGameDetails(g);
-            void loadSpymasterKey(g);
+          } else if (g.current_clue_id) {
+            supabase
+              .from('clues')
+              .select('*')
+              .eq('id', g.current_clue_id)
+              .maybeSingle()
+              .then(({ data }) => setClue((data as Clue | null) ?? null));
           } else {
-            // Clue pointer may have changed; refresh the active clue cheaply.
-            if (g.current_clue_id) {
-              supabase
-                .from('clues')
-                .select('*')
-                .eq('id', g.current_clue_id)
-                .maybeSingle()
-                .then(({ data }) => setClue((data as Clue | null) ?? null));
-            } else {
-              setClue(null);
-            }
+            setClue(null);
           }
         },
-        onCard: (c) =>
-          setCards((prev) => prev.map((card) => (card.id === c.id ? c : card))),
+        onCard: (c) => setCards((prev) => prev.map((card) => (card.id === c.id ? c : card))),
         onClue: (c) => setClue(c),
         onPlayers: () => {
           supabase
@@ -145,8 +157,7 @@ export function useGameState(roomId: string, localPlayer: Player | null): GameSt
       },
     });
     return unsub;
-    // Re-subscribe when the game id transitions from null → set (lobby → in_game).
-  }, [roomId, localPlayer, loadGameDetails, loadSpymasterKey, game?.id]);
+  }, [roomId, localPlayerId, me?.team, me?.role, me?.display_name, loadGameDetails, game?.id]);
 
-  return { room, game, cards, clue, players, presence, spymasterKey, loading, error };
+  return { room, game, cards, clue, players, presence, spymasterKey, loading, error, refresh: snapshot };
 }

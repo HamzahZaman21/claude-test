@@ -3,7 +3,7 @@
 // Returns an unsubscribe function. See LIBRARIES.md for the exact call shapes.
 
 import { supabase } from './supabaseClient';
-import type { Game, Card, Clue, TeamColor, PlayerRole } from './types';
+import type { Room, Game, Card, Clue, TeamColor, PlayerRole } from './types';
 
 export type PresenceMeta = {
   player_id: string;
@@ -13,6 +13,7 @@ export type PresenceMeta = {
 };
 
 export interface GameHandlers {
+  onRoom?: (r: Room) => void;
   onGame?: (g: Game) => void;
   onCard?: (c: Card) => void;
   onClue?: (c: Clue) => void;
@@ -30,6 +31,11 @@ export function subscribeRoom(opts: {
 
   const dataChannel = supabase.channel(`room:${roomId}`);
 
+  dataChannel.on(
+    'postgres_changes',
+    { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
+    (payload) => handlers.onRoom?.(payload.new as Room),
+  );
   dataChannel.on(
     'postgres_changes',
     { event: '*', schema: 'public', table: 'games', filter: `room_id=eq.${roomId}` },

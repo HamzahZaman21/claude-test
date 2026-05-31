@@ -85,7 +85,7 @@ export default function RoomPage() {
 }
 
 function GameRoom({ room, localPlayer }: { room: Room; localPlayer: Player }) {
-  const state = useGameState(room.id, localPlayer);
+  const state = useGameState(room.id, localPlayer.id);
   const [actionError, setActionError] = useState<string | null>(null);
   const pending = useRef<Set<string>>(new Set());
 
@@ -104,11 +104,13 @@ function GameRoom({ room, localPlayer }: { room: Room; localPlayer: Player }) {
   const onStart = useCallback(async () => {
     try {
       await api.startGame(room.id);
+      // Safety net: pull the authoritative snapshot in case the realtime INSERT is missed.
+      await state.refresh();
     } catch (e) {
       flash(e);
       throw e;
     }
-  }, [room.id]);
+  }, [room.id, state]);
 
   const onReveal = useCallback(
     async (cardId: string) => {
@@ -141,10 +143,11 @@ function GameRoom({ room, localPlayer }: { room: Room; localPlayer: Player }) {
   const onRematch = useCallback(async () => {
     try {
       await api.rematch(room.id);
+      await state.refresh();
     } catch (e) {
       flash(e);
     }
-  }, [room.id]);
+  }, [room.id, state]);
 
   if (state.loading) {
     return (
@@ -156,8 +159,10 @@ function GameRoom({ room, localPlayer }: { room: Room; localPlayer: Player }) {
 
   const liveRoom = state.room ?? room;
 
-  // Lobby view: room still in lobby, or no game row yet.
-  if (liveRoom.status === 'lobby' || !game) {
+  // Lobby view until an authoritative game exists. The `games` table is realtime-published,
+  // so the game INSERT from start_game/rematch flips every client into the board view —
+  // we do NOT depend on room.status (which also updates now, but the game is the source of truth).
+  if (!game) {
     return (
       <main className="flex min-h-dvh items-center justify-center p-4">
         <Lobby room={liveRoom} players={state.players} localPlayer={me} onStart={onStart} />

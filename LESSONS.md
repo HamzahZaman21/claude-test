@@ -83,3 +83,24 @@ RPC/Edge Function → RLS) before declaring the data layer done; unit tests on p
 cannot catch SQL/enum/grant issues. After raw-SQL table creation, explicitly GRANT to
 `authenticated`.
 Affected files: migrations 0009–0011 (Supabase), e2e/integration-check.mjs
+
+## 2026-06-01: Two UI bugs found by actually playing the deployed game (not just unit/backend tests)
+What happened: After deploy, clicking "Start game" hung on "Starting…" and never showed the
+board; and the Spymaster saw no secret-key overlay.
+Root causes: (1) The room page decided lobby-vs-board from `room.status`, but the `rooms`
+table was NOT in the realtime publication and was never subscribed, so the client's
+`room.status` never flipped to `in_game`. (2) `useGameState` received the `localPlayer`
+object captured at join time (role `none`), so after the player picked Spymaster in the
+lobby the hook still thought they weren't one and never fetched `card_identities`.
+Fix: (1) added `rooms` to the realtime publication (mig 0012) + subscribed to it, and
+gated the board on the realtime-published `games` row (`if (!game) show Lobby`), plus a
+`refresh()` snapshot safety net after start/rematch. (2) `useGameState` now takes
+`localPlayerId` and derives the live role from the `players` list, re-fetching the
+spymaster key when role/ game changes. Verified end-to-end in the deployed app (Start →
+board, live clue/reveal sync, spymaster key overlay with assassin/neutral/agent icons).
+Prevention: **Always play the actual deployed UI** (start → clue → reveal), not just unit
+and direct-API tests — these were client-state/realtime bugs invisible to both. When a view
+depends on a table's column, that table must be in the realtime publication. Derive live
+role/team from the roster, never from a snapshot captured at join.
+Affected files: migration 0012, src/lib/realtime.ts, src/lib/useGameState.ts,
+src/app/room/[code]/page.tsx
